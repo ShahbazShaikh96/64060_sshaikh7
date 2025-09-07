@@ -1,0 +1,82 @@
+---
+title: "Assignment 1"
+author: "Shahbaz"
+date: "09/03/2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+
+
+```{r import-data}
+website_data <- read.csv("~/Desktop/FML - Assignments & Work/final_website_stats.csv")
+```
+
+
+```{r data-prep}
+# Define the correct order for the days of the week
+correct_order <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+# Convert the 'day_of_week' column from character to an ordered factor
+website_data$day_of_week <- factor(website_data$day_of_week, 
+                                   levels = correct_order, 
+                                   ordered = FALSE)
+```
+
+**INTRODUCTION**
+For this assignment, I chose the E-Commerce website ad cost and viewer count from Kaggle. It contains time stamp, page-view, ad-spend, day of week, if its weekend and if its holiday.
+
+**Table Heads Preview**
+The table below shows the first rows of the dataset
+```{r Heads}
+head(website_data)
+```
+
+```{r Descriptive Stats}
+summary(website_data$page_views)
+summary(website_data$ad_spend)
+```
+
+
+```{r Categorical Stats}
+table(website_data$is_weekend)
+table(website_data$day_of_week)
+table(website_data$is_holiday)
+```
+
+```{r Transforming Variable - Return On Ad Spend ROAS}
+website_data$Views_Per_Dollar <- website_data$page_views/website_data$ad_spend
+head(website_data)
+```
+
+```{r Histogram}
+ggplot(website_data, aes(x = page_views)) +
+  geom_histogram(binwidth = 500, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of Daily Page Views",
+       x = "Page Views",
+       y = "Frequency")
+```
+
+``` {r Scatterplot}
+ggplot(website_data, aes(x = ad_spend, y = page_views)) +
+  geom_point(color = "darkred", size = 3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Page Views vs. Ad Spend",
+       x = "Ad Spend ($)",
+       y = "Page Views")
+```
+
+``` {r Jitter ScatterPlot}
+ggplot(website_data, aes(x = day_of_week, y = ad_spend)) +
+  geom_point(color = "black", size = 3, position = position_jitter(width = 0.2, height = 0)) +
+  labs(title = "Ad Spend by Day of the Week",
+       subtitle = "Jittered points show distribution of values",
+       x = "Day of the Week",
+       y = "Ad Spend ($)") +
+  theme_minimal()
+```
