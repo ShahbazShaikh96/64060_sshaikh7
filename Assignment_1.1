@@ -1,0 +1,62 @@
+---
+title: "Assignment - Extra Credit"
+author: "Shahbaz"
+date: "2025-09-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#installed.packages("caret")
+#install.packages("ISLR")
+library(ISLR)      # This loads the package into your R session
+data(Carseats)     # This command loads the Carseats dataset into your environment
+```
+
+```{r}
+
+summary(Carseats)
+```
+
+# Divide data into three different sets - test, train and validate
+
+```{r}
+set.seed(137)
+all_rows <- 1:nrow(Carseats)
+test_indices <- sample(all_rows, size=100, replace=FALSE)
+temp_indices <- setdiff(all_rows, test_indices)
+validation_indices <- sample(temp_indices, size=100, replace = FALSE)
+train_indices <- setdiff(temp_indices, validation_indices)
+```
+
+# Displaying the Set size and dim
+```{r}
+train_set <- Carseats[train_indices, ]
+validation_set <- Carseats[validation_indices, ]
+test_set <- Carseats[test_indices, ]
+
+cat("Training Set size:", nrow(train_set), "Dim", dim(train_set),"\n")
+cat("Validation Set size:", nrow(validation_set), "Dim", dim(validation_set), "\n")
+cat("Test Set size:", nrow(test_set), "Dim", dim(test_set),"\n")
+```
+
+```{r}
+summary(train_set)
+```
+
+```{r}
+summary(validation_set)
+```
+
+```{r}
+summary(test_set)
+```
+
+# Checking Duplicate
+```{r Duplicate}
+duplicate_3 <- intersect(intersect(train_set, validation_set),test_set)
+print(duplicate_3)
+```
