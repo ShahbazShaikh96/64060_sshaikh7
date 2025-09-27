@@ -1,0 +1,229 @@
+---
+title: "Assignment 2 - k-NN Classification for Universal Bank"
+author: "Shahbaz"
+date: "2025-09-26"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Including Plots - You can also embed plots, for example:
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+# Load required libraries
+```{r}
+library(caret)    
+library(class)   
+library(dplyr)
+```
+
+# Step 1 (Data Preparation/Loading)
+```{r}
+bd <- read.csv("/Users/shahbazshaikh/Downloads/UniversalBank.csv")
+```
+
+# Removing ID and Zip Code Columns as Instructed
+```{r}
+bd <- bd[, !(names(bd) %in% c("ID", "ZIP.Code"))]
+```
+
+
+# Converting Education to Factor and Creating Dummy Variables
+```{r}
+bd$Education <- as.factor(bd$Education)
+dummy_edu <- model.matrix(~ Education - 1, data = bd)
+bd <- cbind(bd, dummy_edu)
+bd <- bd[, !(names(bd) %in% "Education")]
+bd$Personal.Loan <- as.factor(bd$Personal.Loan)
+str(bd)
+```
+
+# Step 2 - First Partition (60% Training, 40% Validation)
+```{r}
+set.seed(123)
+train_index <- createDataPartition(bd$Personal.Loan, p = 0.6, list = FALSE)
+train_set <- bd[train_index, ]
+valid_set <- bd[-train_index, ]
+
+cat("Training set size:", nrow(train_set), "\n")
+cat("Validation set size:", nrow(valid_set))
+```
+
+# Preparing for K-NN: Normalization
+```{r}
+train_labels <- train_set$Personal.Loan
+valid_labels <- valid_set$Personal.Loan
+
+train_pred <- train_set[, !(names(train_set) %in% "Personal.Loan")]
+valid_pred <- valid_set[, !(names(valid_set) %in% "Personal.Loan")]
+
+preproc_params <- preProcess(train_pred, method = c("center", "scale"))
+train_norm <- predict(preproc_params, train_pred)
+valid_norm <- predict(preproc_params, valid_pred)
+```
+
+# Question 1: Classifying with K=1
+```{r}
+new_customer <- data.frame(
+  Age = 25, Experience = 2, Income = 100, Family = 2, CCAvg = 4,
+  Mortgage = 0, Securities.Account = 0, CD.Account = 0, Online = 1,
+  CreditCard = 1, Education1 = 0, Education2 = 1, Education3 = 0
+)
+
+
+
+new_customer_norm <- predict(preproc_params, new_customer)
+```
+
+# Normalizing and Performing k-NN classification with k=1
+```{r}
+knn_pred_k1 <- knn(train = train_norm, test = new_customer_norm,
+                   cl = train_labels, k = 1)
+cat("Question 1: Classification with  k=1:\n")
+cat("The customer would be classified as:", as.character(knn_pred_k1),"\n")
+cat("This means the customer will", ifelse(knn_pred_k1 == 1, "ACCEPT", "NOT ACCEPT"), "the loan offer.\n")
+```
+
+# Question 2 - Finding Optimal K
+```{r}
+k_values <- seq(1, 15, 2)
+accuracy_values <- numeric(length(k_values))
+
+for (i in 1:length(k_values)) {
+  knn_pred <- knn(train = train_norm, test = valid_norm,
+                  cl = train_labels, k = k_values[i])
+cm <- confusionMatrix(knn_pred, valid_labels)
+accuracy_values[i] <- cm$overall["Accuracy"]
+}
+
+#Creating results dataframe
+k_results <- data.frame(k = k_values, Accuracy = accuracy_values)
+print(k_results)
+
+#Plotting k vs accuracy
+plot(k_results$k, k_results$Accuracy, type = "b", xlab = "k Value", 
+     ylab = "Validation Accuracy", main = "Finding Optimal k")
+grid()
+
+#Finding best k
+best_k <- k_results$k[which.max(k_results$Accuracy)]
+cat("\nQuestion 2: Optimal k value is:", best_k, "\n")
+cat("This k balances between overfitting and ignoring predictor information.\n")
+```
+
+# Questions 3 - Validation Matrix and Classify with Best k
+```{r}
+knn_pred_best <- knn(train = train_norm, test = valid_norm, 
+                     cl = train_labels, k = best_k)
+cm_valid <- confusionMatrix(knn_pred_best, valid_labels)
+
+cat("Question 3: Confusion Matrix for Validation Data (k =", best_k, ")\n")
+print(cm_valid$table)
+```
+
+
+# Question 4: Classify the customer with best k
+```{r}
+knn_customer_best <- knn(train = train_norm, test = new_customer_norm, 
+                         cl = train_labels, k = best_k)
+
+cat("\nQuestion 4: Classification with optimal k =", best_k, ":\n")
+cat("The customer would be classified as:", as.character(knn_customer_best), "\n")
+cat("This means the customer will", ifelse(knn_customer_best == 1, "ACCEPT", "NOT ACCEPT"), "the loan offer.\n")
+```
+
+# Question 5: Three-Way Partition (50:30:20)
+```{r}
+
+set.seed(456) # Different seed for new partition
+train_index2 <- createDataPartition(bd$Personal.Loan, p = 0.5, list = FALSE)
+train_set2 <- bd[train_index2, ]
+temp_set <- bd[-train_index2, ]
+
+# Split the remaining 50% (temp_set) into 60% validation + 40% test
+# This gives us 30% and 20% of the original data respectively
+valid_index2 <- createDataPartition(temp_set$Personal.Loan, p = 0.6, list = FALSE) # 0.6 of 0.5 = 0.3
+valid_set2 <- temp_set[valid_index2, ]
+test_set2 <- temp_set[-valid_index2, ]
+
+cat("New partition sizes:\n")
+cat("Training set:", nrow(train_set2), "\n")
+cat("Validation set:", nrow(valid_set2), "\n")
+cat("Test set:", nrow(test_set2), "\n")
+
+
+train_labels2 <- train_set2$Personal.Loan
+valid_labels2 <- valid_set2$Personal.Loan
+test_labels2 <- test_set2$Personal.Loan
+
+train_pred2 <- train_set2[, !(names(train_set2) %in% "Personal.Loan")]
+valid_pred2 <- valid_set2[, !(names(valid_set2) %in% "Personal.Loan")]
+test_pred2 <- test_set2[, !(names(test_set2) %in% "Personal.Loan")]
+
+preproc_params2 <- preProcess(train_pred2, method = c("center", "scale"))
+train_norm2 <- predict(preproc_params2, train_pred2)
+valid_norm2 <- predict(preproc_params2, valid_pred2)
+test_norm2 <- predict(preproc_params2, test_pred2)
+
+
+accuracy_values2 <- numeric(length(k_values))
+for (i in 1:length(k_values)) {
+  knn_pred <- knn(train = train_norm2, test = valid_norm2, 
+                  cl = train_labels2, k = k_values[i])
+  cm <- confusionMatrix(knn_pred, valid_labels2)
+  accuracy_values2[i] <- cm$overall["Accuracy"]
+}
+
+best_k2 <- k_values[which.max(accuracy_values2)]
+cat("Optimal k with new partition:", best_k2, "\n")
+```
+
+# Generate confusion matrices for all three sets
+```{r}
+knn_train <- knn(train = train_norm2, test = train_norm2, 
+                 cl = train_labels2, k = best_k2)
+knn_valid <- knn(train = train_norm2, test = valid_norm2, 
+                 cl = train_labels2, k = best_k2)
+knn_test <- knn(train = train_norm2, test = test_norm2, 
+                cl = train_labels2, k = best_k2)
+
+cm_train <- confusionMatrix(knn_train, train_labels2)
+cm_valid2 <- confusionMatrix(knn_valid, valid_labels2)
+cm_test <- confusionMatrix(knn_test, test_labels2)
+
+cat("\nQuestion 5: Confusion Matrices Comparison\n")
+cat("Training Set Confusion Matrix:\n")
+print(cm_train$table)
+cat("\nValidation Set Confusion Matrix:\n")
+print(cm_valid2$table)
+cat("\nTest Set Confusion Matrix:\n")
+print(cm_test$table)
+
+
+#Calculate accuracies for comparison
+accuracies <- data.frame(
+  Set = c("Training", "Validation", "Test"),
+  Accuracy = c(cm_train$overall["Accuracy"], 
+               cm_valid2$overall["Accuracy"], 
+               cm_test$overall["Accuracy"])
+)
+cat("\nAccuracy Comparison:\n")
+print(accuracies)
+```
+
+# Interpretation for Question 5
+The differences in accuracy across the three sets are expected:
+
+1. Training set has the highest accuracy because the model was built on this data.
+2. Validation set accuracy is slightly lower as this data was used to tune the model (select k).
+3. Test set accuracy provides the best estimate of real-world performance on completely new, unseen data.
+
+The minor decrease in accuracy from validation to test set is normal and reflects the model's generalization error. The test set performance ( 0.96 ) is the most reliable indicator of how the model would perform in an actual marketing campaign.
+
+
