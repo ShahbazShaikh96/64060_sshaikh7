@@ -1,0 +1,155 @@
+---
+title: "Assignment 3"
+author: "Shahbaz"
+date: "2025-10-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(e1071)
+```
+
+# The purpose of this assignment is to apply NAIVE BAYES CLASSIFICATION to predict whether a customer will accept a personal loan based on two predictors:
+
+#Online: whether the customer uses online banking (1 = YES, 0 = NO)
+#CC: whether the customer holds a bank-issued credit card (1 = YES, 0 = NO)
+# Outcome Variable : Loan: whether the customer accepted the loan offer (1 = YES, 0 = NO)
+
+# Data Preparation
+```{r}
+UB <- read.csv("/Users/shahbazshaikh/Downloads/UniversalBank.csv")
+head(UB)
+
+UB <- UB %>% select(Online, CCAvg, Personal.Loan) %>%
+  rename(Loan = Personal.Loan)
+
+UB$Online <- factor(UB$Online, levels = c(0, 1), labels = c("No", "Yes"))
+UB$Loan <- factor(UB$Loan, levels = c(0, 1), labels = c("No", "Yes"))
+
+UB$CC <- ifelse(UB$CCAvg > 0, "Yes", "No")
+UB$CC <- factor(UB$CC, levels = c("No", "Yes"))
+
+set.seed(1)
+n <- nrow(UB)
+train_index <- sample(1:n, size = 0.6*n)
+train_data <- UB[train_index, ]
+valid_data <- UB[-train_index, ]
+
+cat("Training set dimensions:", dim(train_data), "\n")
+cat("Validation set dimensions:", dim(valid_data), "\n")
+cat("\nFirst few rows of training data:\n")
+head(train_data)
+```
+
+# Part A : Pivot Table
+```{r}
+pivot_table <- with(train_data, table(CC, Loan, Online))
+
+print("Pivot Table (CC x Loan x Online):")
+ftable(pivot_table)
+```
+
+#Part B : Probability from Pivot Table
+```{r}
+count_loan_yes <- pivot_table["Yes", "Yes", "Yes"]
+total_count_cc_online_yes <- sum(pivot_table["Yes", , "Yes"])
+
+prob_b <- count_loan_yes / total_count_cc_online_yes
+
+cat("Count of customers with CC=Yes, Online=Yes, Loan=Yes:", count_loan_yes, "\n")
+cat("Total count of customers with CC=Yes, Online=Yes:", total_count_cc_online_yes, "\n")
+cat("P(Loan = Yes | CC = Yes, Online = Yes) =", round(prob_b, 4), "\n")
+```
+
+#Part C : Separate Pivot Tables
+```{r}
+# Table 1: Loan as function of Online
+table_loan_online <- table(train_data$Loan, train_data$Online)
+colnames(table_loan_online) <- c("Online=No", "Online=Yes")
+rownames(table_loan_online) <- c("Loan=No", "Loan=Yes")
+
+print("Pivot Table: Loan by Online")
+print(table_loan_online)
+
+# Table 2: Loan as function of CC
+table_loan_cc <- table(train_data$Loan, train_data$CC)
+colnames(table_loan_cc) <- c("CC=No", "CC=Yes")
+rownames(table_loan_cc) <- c("Loan=No", "Loan=Yes")
+
+print("Pivot Table: Loan by CC")
+print(table_loan_cc)
+```
+
+# Part D : Compute Required Probabilities
+```{r}
+# Total training observations
+n_train <- nrow(train_data)
+
+p_cc1_loan1 <- table_loan_cc["Loan=Yes", "CC=Yes"] / sum(table_loan_cc["Loan=Yes", ])
+p_online1_loan1 <- table_loan_online["Loan=Yes", "Online=Yes"] / sum(table_loan_online["Loan=Yes", ])
+p_loan1 <- sum(table_loan_cc["Loan=Yes", ]) / n_train
+p_cc1_loan0 <- table_loan_cc["Loan=No", "CC=Yes"] / sum(table_loan_cc["Loan=No", ])
+p_online1_loan0 <- table_loan_online["Loan=No", "Online=Yes"] / sum(table_loan_online["Loan=No", ])
+p_loan0 <- sum(table_loan_cc["Loan=No", ]) / n_train
+
+
+results_d <- data.frame(
+  Probability = c("P(CC=Yes | Loan=Yes)", "P(Online=Yes | Loan=Yes)", "P(Loan=Yes)",
+                  "P(CC=Yes | Loan=No)", "P(Online=Yes | Loan=No)", "P(Loan=No)"),
+  Value = round(c(p_cc1_loan1, p_online1_loan1, p_loan1,
+                  p_cc1_loan0, p_online1_loan0, p_loan0), 4)
+)
+
+print(results_d)
+```
+
+#Part E : Naive Bayes Probability
+```{r}
+# Naive Bayes calculation
+numerator <- p_cc1_loan1 * p_online1_loan1 * p_loan1
+denominator <- numerator + (p_cc1_loan0 * p_online1_loan0 * p_loan0)
+prob_e <- numerator / denominator
+
+cat("Naive Bayes Calculation:\n")
+cat("P(Loan = Yes | CC = Yes, Online = Yes) =", round(prob_e, 4), "\n")
+```
+
+#Part F: Comparison
+```{r}
+cat("Comparison of Probability Estimates:\n")
+cat("From Pivot Table (Part B):", round(prob_b, 4), "\n")
+cat("From Naive Bayes (Part E):", round(prob_e, 4), "\n")
+
+cat("\nWhich is more accurate?\n")
+cat("The pivot table estimate is more accurate when we have sufficient data in the specific combination,\n")
+cat("as it doesn't rely on the conditional independence assumption of Naive Bayes.\n")
+```
+#Part G: Naive Bayes Model Output
+```{r}
+# Train Naive Bayes model
+nb_model <- naiveBayes(Loan ~ Online + CC, data = train_data)
+
+# Examine model output
+print("Naive Bayes Model Output:")
+print(nb_model)
+
+# Predict probability for our case
+test_case <- data.frame(Online = "Yes", CC = "Yes")
+pred_probs <- predict(nb_model, test_case, type = "raw")
+prob_g <- pred_probs[, "Yes"]
+
+cat("\nProbability from naiveBayes function:\n")
+cat("P(Loan = Yes | CC = Yes, Online = Yes) =", round(prob_g, 4), "\n")
+
+cat("\nComparison with manual calculation:\n")
+cat("Manual Naive Bayes (Part E):", round(prob_e, 4), "\n")
+cat("R naiveBayes function:", round(prob_g, 4), "\n")
+cat("Are they equal?", abs(prob_e - prob_g) < 0.0001, "\n")
+```
+
+### Conclusion
+Both the empirical (pivot table) and theoretical (Naive Bayes) estimates produced nearly identical probabilities (≈0.0965). This confirms that the independence assumption of Naive Bayes performs well for these variables, and that customers who both own a credit card and use online banking have about a 9.6% chance of accepting a personal loan.
+
