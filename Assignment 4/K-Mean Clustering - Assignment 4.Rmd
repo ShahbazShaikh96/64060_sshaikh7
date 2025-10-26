@@ -1,0 +1,116 @@
+---
+title: "K-Mean Clustering - Assignment 4"
+author: "Shahbaz"
+date: "2025-10-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r}
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(dplyr)
+library(knitr)
+```
+
+# Loading Data
+
+```{r}
+pharma <- read.csv("/Users/shahbazshaikh/Downloads/Pharmaceuticals.csv")
+summary(pharma)
+str(pharma)
+sum(is.na(pharma))
+```
+
+# Selecting only 9 Variables
+
+```{r}
+
+pharma_num <- pharma[, 3:11] 
+
+pharma_scaled <- scale(pharma_num)
+```
+
+# Determining optimal number of K
+
+```{r}
+fviz_nbclust(pharma_scaled, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2) +
+  labs(title = "Elbow Method for Optimal K - Elbow Point")
+```
+
+```{r}
+fviz_nbclust(pharma_scaled, kmeans, method = "silhouette") +
+  labs(title = "Silhouette Method for Optimal K")
+```
+
+# Performing K - Means Clustering
+
+```{r}
+set.seed(123)
+optimal_k <- 3
+k3 <- kmeans(pharma_scaled, centers = optimal_k, nstart = 25)
+pharma$cluster <- as.factor(k3$cluster)
+table(pharma$cluster)
+```
+
+# Visualizing the Clusters
+
+```{r}
+fviz_cluster(k3, data = pharma_scaled,
+             ellipse.type = "norm",
+             geom = "point",
+             main = "K-means Clustering of Pharmaceutical Firms")
+```
+
+# Interpreting Cluster Characteristics
+
+```{r}
+cluster_summary <- pharma %>%
+  mutate(Cluster = k3$cluster) %>%
+  group_by(Cluster) %>%
+  summarise(across(Market_Cap:Net_Profit_Margin, \(x) mean(x, na.rm = TRUE)))
+
+cluster_summary
+```
+
+```{r}
+pharma %>%
+  mutate(Cluster = k3$cluster) %>%
+  group_by(Cluster, Median_Recommendation) %>%
+  summarise(count = n())
+
+pharma %>%
+  mutate(Cluster = k3$cluster) %>%
+  group_by(Cluster, Location) %>%
+  summarise(count = n())
+
+pharma %>%
+  mutate(Cluster = k3$cluster) %>%
+  group_by(Cluster, Exchange) %>%
+  summarise(count = n())
+```
+
+# Names for Cluster
+
+```{r}
+cluster_names <- c(
+  "1" = "Established Global Leaders",
+  "2" = "Balanced Performers", 
+  "3" = "Emerging or Risky Firms"
+)
+
+# Apply cluster names to the dataset
+pharma$cluster_named <- cluster_names[as.character(pharma$cluster)]
+
+kable(pharma[, c("Name", "cluster", "cluster_named")])
+```
+
+#In this project, I used the Elbow Method to determine the optimal number of clusters. It helps identify the point where adding more clusters no longer significantly reduces the within-cluster variance. I chose this method because it’s simple, visual, and effective for moderate-sized datasets like mine. The Elbow point appeared at k = 3, which was used for the final K-Means model.
+
