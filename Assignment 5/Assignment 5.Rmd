@@ -1,0 +1,181 @@
+---
+title: 'Assignment 5: Hierarchical Clustering of Breakfast Cereals'
+author: "Shahbaz"
+date: "2025-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+#This report uses hierarchical clustering to analyze nutritional data for 77 breakfast cereals. The goal is to identify distinct cereal profiles, determine an optimal number of clusters, assess their stability, and ultimately identify a cluster of "healthy cereals" suitable for elementary school cafeterias.
+
+# Loading Necessary Libraries
+```{r}
+library(cluster)
+library(dplyr)
+library(ggplot2)
+library(factoextra)
+library(corrplot)
+```
+# Loading & Cleaning Data
+```{r}
+# Loading the dataset
+cereals <- read.csv("/Users/shahbazshaikh/Downloads/Cereals.csv")
+
+# Initial data inspection
+cat("Original dataset dimensions:", dim(cereals), "\n")
+cat("\nMissing values by column:\n")
+print(colSums(is.na(cereals)))
+
+# Removing cereals with missing values
+cereals_clean <- na.omit(cereals)
+cat("\nDataset dimensions after removing NAs:", dim(cereals_clean), "\n")
+
+# Display the first few rows
+head(cereals_clean)
+```
+# Data Preparation for Clustering
+```{r}
+# Selecting only numerical variables for clustering
+# Excluding name, manufacturer, and type as they are identifiers/categorical
+numerical_vars <- c("calories", "protein", "fat", "sodium", "fiber", 
+                    "carbo", "sugars", "potass", "vitamins", "shelf", "weight", "cups", "rating")
+
+cereals_numeric <- cereals_clean[, numerical_vars]
+
+# Checking the structure of numerical data
+str(cereals_numeric)
+
+# Normalizing the data (crucial for clustering with Euclidean distance)
+cereals_scaled <- scale(cereals_numeric)
+summary(cereals_scaled)
+```
+
+# Hierarchical Clustering with Different Linkage Methods
+```{r}
+# Applying AGNES with different linkage methods
+agnes_single <- agnes(cereals_scaled, method = "single")
+agnes_complete <- agnes(cereals_scaled, method = "complete")
+agnes_average <- agnes(cereals_scaled, method = "average")
+agnes_ward <- agnes(cereals_scaled, method = "ward")
+
+# Plotting the dendrograms for comparison
+par(mfrow = c(2, 2))
+plot(agnes_single, which.plots = 2, main = "Single Linkage", cex = 0.6, hang = -1)
+plot(agnes_complete, which.plots = 2, main = "Complete Linkage", cex = 0.6, hang = -1)
+plot(agnes_average, which.plots = 2, main = "Average Linkage", cex = 0.6, hang = -1)
+plot(agnes_ward, which.plots = 2, main = "Ward's Method", cex = 0.6, hang = -1)
+par(mfrow = c(1, 1))
+```
+
+# Choosing the Best Linkage Method
+```{r}
+# Calculating agglomerative coefficients (closer to 1 = better structure)
+ac_single <- agnes_single$ac
+ac_complete <- agnes_complete$ac
+ac_average <- agnes_average$ac
+ac_ward <- agnes_ward$ac
+
+linkage_comparison <- data.frame(
+  Method = c("Single", "Complete", "Average", "Ward"),
+  Agglomerative_Coefficient = c(ac_single, ac_complete, ac_average, ac_ward)
+)
+
+print(linkage_comparison)
+```
+
+# Determining the Optimal Number of Clusters
+```{r}
+# Using the elbow method and silhouette analysis
+fviz_nbclust(cereals_scaled, FUN = hcut, method = "wss", 
+             k.max = 10) + ggtitle("Optimal Number of Clusters - Elbow Method")
+
+fviz_nbclust(cereals_scaled, FUN = hcut, method = "silhouette", 
+             k.max = 10) + ggtitle("Optimal Number of Clusters - Silhouette Method")
+```
+```{r}
+# Let's examine the dendrogram height to identify significant jumps
+ward_heights <- agnes_ward$height
+height_differences <- diff(ward_heights)
+cat("Largest height differences (indicating good cut points):\n")
+print(sort(height_differences, decreasing = TRUE)[1:5])
+```
+
+```{r}
+# Cuttin the dendrogram to create 4 clusters
+final_clusters <- cutree(agnes_ward, k = 4)
+cereals_clean$cluster <- final_clusters
+
+# Cluster sizes
+cat("Cluster sizes:\n")
+print(table(final_clusters))
+
+# Visualize the clusters
+fviz_cluster(list(data = cereals_scaled, cluster = final_clusters), 
+             geom = "point", pointsize = 1.5) + 
+  ggtitle("Cluster Plot of Cereals (PCA)")
+
+# Alternative visualization if the above still causes issues
+fviz_dend(agnes_ward, k = 4, 
+          cex = 0.6, 
+          k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+          color_labels_by_k = TRUE,
+          rect = TRUE)
+```
+```{r}
+# Analyzing cluster characteristics
+cluster_profiles <- cereals_clean %>%
+  group_by(cluster) %>%
+  summarise(
+    n = n(),
+    avg_calories = mean(calories),
+    avg_sugar = mean(sugars),
+    avg_fiber = mean(fiber),
+    avg_protein = mean(protein),
+    avg_sodium = mean(sodium),
+    avg_rating = mean(rating)
+  )
+
+print(cluster_profiles)
+
+# Detailed nutritional profiles by cluster
+cluster_details <- cereals_clean %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean))
+
+print(cluster_details[, c("cluster", "calories", "sugars", "fiber", "protein", "sodium", "fat", "rating")])
+```
+
+```{r}
+# Cluster Structure Analysis
+cat("Cluster Structure Analysis:\n")
+
+# Calculate fat means for each cluster since it's not in cluster_profiles
+fat_means <- cereals_clean %>%
+  group_by(cluster) %>%
+  summarise(avg_fat = mean(fat))
+
+for(i in 1:4) {
+  sugar_char <- ifelse(cluster_profiles$avg_sugar[i] > mean(cereals_clean$sugars), "high sugar", "low sugar")
+  
+  if(i == 1) {
+    fiber_char <- ifelse(cluster_profiles$avg_fiber[i] > mean(cereals_clean$fiber), "high fiber", "low fiber")
+    cat("- Cluster 1:", cluster_profiles$n[1], "cereals. Characterized by", sugar_char, "and", fiber_char, ".\n")
+  } else if(i == 2) {
+    rating_char <- ifelse(cluster_profiles$avg_rating[i] > mean(cereals_clean$rating), "high rating", "low rating")
+    cat("- Cluster 2:", cluster_profiles$n[2], "cereals. Characterized by", sugar_char, "and", rating_char, ".\n")
+  } else if(i == 3) {
+    protein_char <- ifelse(cluster_profiles$avg_protein[i] > mean(cereals_clean$protein), "high protein", "low protein")
+    fiber_char <- ifelse(cluster_profiles$avg_fiber[i] > mean(cereals_clean$fiber), "high fiber", "low fiber")
+    cat("- Cluster 3:", cluster_profiles$n[3], "cereals. Characterized by", protein_char, "and", fiber_char, ".\n")
+  } else if(i == 4) {
+    calories_char <- ifelse(cluster_profiles$avg_calories[i] > mean(cereals_clean$calories), "high calories", "low calories")
+    fat_char <- ifelse(fat_means$avg_fat[i] > mean(cereals_clean$fat), "high fat", "low fat")
+    cat("- Cluster 4:", cluster_profiles$n[4], "cereals. Characterized by", calories_char, "and", fat_char, ".\n")
+  }
+}
+```
+
